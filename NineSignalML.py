@@ -209,12 +209,12 @@ batch_model_grad = vmap(model_grad, in_axes=(0, 0, None))
 
 # %%
 # Hyperparameters
-epochs = 10
-batchsize = 2
+epochs = 5
+batchsize = 20
 
 # %%
 # Load the data
-with open(f"datasets/8fmsk/waveforms.pkl", "rb") as f:
+with open(f"datasets/8fmsk/waveforms_uniform.pkl", "rb") as f:
     data = pkl.load(f)
 
 # Randomize the dataset
@@ -235,10 +235,6 @@ del shuffled_data
 gc.collect()
 
 # %%
-for xs, ys in zip(train_sequences, train_labels):
-    print(type(xs), type(ys))
-
-# %%
 train_acc = []
 test_acc = []
 
@@ -252,8 +248,8 @@ for i in range(epochs):
             model_parameters = parameter_update(model_parameters, gradients)
             bar()
     print("Calculating accuracy")
-    train_acc.append(np.mean([accuracy(jnp.array(x), jnp.array(y), model_parameters) for x, y in zip(mit.chunked(train_sequences, 10), mit.chunked(train_labels, 10))]))
-    test_acc.append(np.mean([accuracy(jnp.array(x), jnp.array(y), model_parameters) for x, y in zip(mit.chunked(test_sequences, 10), mit.chunked(test_labels, 10))]))
+    train_acc.append(np.mean([accuracy(jnp.array(x), jnp.array(y), model_parameters) for x, y in zip(train_sequences, train_labels)]))
+    test_acc.append(np.mean([accuracy(jnp.array(x), jnp.array(y), model_parameters) for x, y in zip(test_sequences, test_labels)]))
 
     print(f"Train Accuracy: {train_acc[i]}")
     print(f"Test Accuracy: {test_acc[i]}")
