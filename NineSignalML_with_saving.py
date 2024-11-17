@@ -258,7 +258,7 @@ for k in range(epochs):
     print(f"Train Accuracy: {train_acc[k]}")
     print(f"Test Accuracy: {test_acc[k]}")
 
-    model_parameters_list[f"Epoch {i}"] = model_parameters
+    model_parameters_list[f"Epoch {k}"] = model_parameters
 
 model_parameters_list["Accuracy"] = (train_acc, test_acc)
 
