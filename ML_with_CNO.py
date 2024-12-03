@@ -134,10 +134,11 @@ def sum_pooling(sequence_to_pool):
 # Create the model
 Linear_encoder_parameter  = init_mlp_parameters([1,5,10])
 seconday_parameters = init_mlp_parameters([10,10,10])
-LRU = init_lru_parameters(10, 10, r_min =0.9, r_max=0.999)
+LRU = init_lru_parameters(100, 10, r_min =0.9, r_max=0.999)
 Linear_decoder_parameter = init_mlp_parameters([10,10,9])
 
 model_parameters = [Linear_encoder_parameter, LRU, seconday_parameters, Linear_decoder_parameter]
+
 
 def model_forward(input_sequence, parameters):
     Linear_encoder_parameter,  LRU, seconday_parameters, Linear_decoder_parameter = parameters
@@ -209,7 +210,7 @@ batch_model_grad = vmap(model_grad, in_axes=(0, 0, None))
 
 # %%
 # Hyperparameters
-epochs = 5
+epochs = 10
 batchsize = 10
 
 # %%
@@ -225,8 +226,8 @@ shuffled_data = [data[i] for i in perm]
 # Seperate into a train set and test set
 del data
 
-train_sequences = jnp.array([x[0] for x in shuffled_data[:int(0.8*len(shuffled_data))]]).reshape((int(0.8*len(shuffled_data)),20000,1)).reshape((int(0.8*len(shuffled_data)/batchsize),batchsize,-1,1))
-test_sequences = jnp.array([x[0] for x in shuffled_data[int(0.8*len(shuffled_data)):]]).reshape((len(shuffled_data) - int(0.8*len(shuffled_data)),20000,1)).reshape((int((len(shuffled_data) - int(0.8*len(shuffled_data)))/batchsize),batchsize,-1,1))
+train_sequences = jnp.array([x[0] for x in shuffled_data[:int(0.8*len(shuffled_data))]]).reshape((int(0.8*len(shuffled_data)),3000,1)).reshape((int(0.8*len(shuffled_data)/batchsize),batchsize,-1,1))
+test_sequences = jnp.array([x[0] for x in shuffled_data[int(0.8*len(shuffled_data)):]]).reshape((len(shuffled_data) - int(0.8*len(shuffled_data)),3000,1)).reshape((int((len(shuffled_data) - int(0.8*len(shuffled_data)))/batchsize),batchsize,-1,1))
 
 train_labels = one_hot(jnp.array([x[1] for x in shuffled_data[:int(0.8*len(shuffled_data))]]), 9).reshape((int(0.8*len(shuffled_data)/batchsize),batchsize,-1))
 test_labels = one_hot(jnp.array([x[1] for x in shuffled_data[int(0.8*len(shuffled_data)):]]), 9).reshape((int((len(shuffled_data) - int(0.8*len(shuffled_data)))/batchsize),batchsize,-1))
@@ -242,7 +243,7 @@ test_sequences = jax.device_put(test_sequences, jax.devices()[0])
 test_labels = jax.device_put(test_labels, jax.devices()[0])
 
 # %%
-optimizer = optax.adam(1e-3)
+optimizer = optax.adam(3e-4)
 opt_state = optimizer.init(model_parameters)
 
 train_acc = []
@@ -269,7 +270,7 @@ for k in range(epochs):
 
 model_parameters_list["Accuracy"] = (train_acc, test_acc)
 
-with open("model_parameters_8MFSK_with_CNO.pkl", "wb") as f:
+with open("model_parameters_8MFSK_with_CNO2.pkl", "wb") as f:
     pkl.dump(model_parameters_list, f)
 
 # %%
