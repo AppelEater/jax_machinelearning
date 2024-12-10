@@ -13,7 +13,6 @@ import more_itertools as mit
 
 import os
 
-from alive_progress import alive_bar
 import gc
 
 parallel_scan = jax.lax.associative_scan
@@ -26,6 +25,18 @@ def binary_operator_diag(element_i, element_j):
 
 
 def init_lru_parameters(N, H, r_min = 0.0, r_max = 1, max_phase = 6.28):
+    """
+    Initialize the LRU parameters
+
+    N : integer, the state dimension (Memory)
+    H : integer, the model dimension (Output dimension and input)
+    r_min : float, the minimum value of the radius of the complex number
+    r_max : float, the maximum value of the radius of the complex number
+    max_phase : float, the maximum value of the phase of the complex number
+
+    return : tuple, the LRU parameters
+
+    """
     # N: state dimension, H: model dimension
     # Initialization of Lambda is complex valued distributed uniformly on ring
     # between r_min and r_max, with phase in [0, max_phase].
@@ -71,6 +82,13 @@ def forward_LRU(lru_parameters, input_sequence):
     return y
 
 def init_mlp_parameters(layers):
+    """
+    Intialize the parameters of the MLP
+
+    layers : list of integers, where each element is the number of neurons in each layer
+
+    return : list of tuples, where each tuple is the weight matrix and bias vector of the layer
+    """
     # Initialize the MLP parameters
     parameters = []
     for i in range(len(layers)-1):
@@ -214,4 +232,3 @@ def load_data(data_file_path, batch_size, targets, test_ratio = 0.8):
     # .reshape((int(0.8*len(shuffled_data)/batch_size),batch_size,-1,1))
 
     return train_sequences, train_labels, test_sequences, test_labels
-
