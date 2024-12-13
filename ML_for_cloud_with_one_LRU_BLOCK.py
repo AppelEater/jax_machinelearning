@@ -18,6 +18,8 @@ def train_model(model_and_hyper_parameters_for_function, data_file_path):
     # Load the data
     train_sequences, train_labels, test_sequences, test_labels = load_data(data_file_path, model_and_hyper_parameters_for_function["batch_size "], 9)
 
+    print(test_labels.shape)
+
     # Train the model
     model_parameters = model_and_hyper_parameters_for_function["Model Parameters"]
 
@@ -71,21 +73,39 @@ LRU_sub_1 = init_lru_parameters(256, 10, r_min =0.9, r_max=0.999)
 LRU_nonlinear_part = init_mlp_parameters([10,10,10])
 Decoding_layer = init_mlp_parameters([10,10,9])
 
+
+# Batch size
+batch_sizes = [15]
+
 # Learning rate
-learning_rates = jnp.logspace(-3.3,-4.5,10)
-batch_sizes = np.arange(13,18,1)
+boundaries = [7200, 9600, 12000]  # Steps where LR changes
+values = [0.0002, 0.00015, 0.0001, 0.00005]  # LR for each interval
+learning_rates = [optax.piecewise_constant_schedule(
+    init_value=0.0002,
+    boundaries_and_scales=dict(zip(boundaries, values[1:])),
+)] 
+
+
+
+# FROM GRID SEARCH SEVEN THE DICTIONARY CHANGES, LEARNING RATE CAN NO LONGER BE SAVED BY IT SELF AS IT CAN BE A SCHEDULE
+
 
 # Define the hyperparameters and model
-for idx, learning_rate in enumerate(learning_rates):
-    model_and_hyperparameters = {"Model Parameters" : (Encoding_layer, LRU_sub_1, LRU_nonlinear_part, Decoding_layer),
-                                "Learning Rate" : learning_rate,
-                                "batch_size " : 15,
-                                "epochs" : 20,
-                                "optimizer" : "Adam",
-                                "loss_function" : "CrossEntropy",
-                                "metric" : "Accuracy",
-                                "training dataset circumstanct" : "Steady frequeny, CN0 15 dbHz"
-                                } 
+for i in range(10): 
+    for idx, learning_rate in enumerate(learning_rates):
+        model_and_hyperparameters = {"Model Parameters" : (Encoding_layer, LRU_sub_1, LRU_nonlinear_part, Decoding_layer),
+                                    "Learning Rate" : learning_rate,
+                                    "batch_size " : 15,
+                                    "epochs" : 25,
+                                    "optimizer" : "Adam",
+                                    "loss_function" : "CrossEntropy",
+                                    "metric" : "Accuracy",
+                                    "training dataset circumstanct" : "Steady frequeny, CN0 15 dbHz",
+                                    "Learning Schedule": {  # Correct key syntax
+                                                "Schedule Type": "Piecewise Constant",
+                                                "Bounds": boundaries,
+                                                "Values": values
+                                    } }
 
-    with open(f"grid_search5/results{idx} time {datetime.now()}.pkl", "wb") as f:
-        pkl.dump(train_model(model_and_hyperparameters, "/root/Project/jax_machinelearning/datasets/8mfsk/waveforms_CNO.pkl"), f)
+        with open(f"grid_search7/results{idx} time {datetime.now()}.pkl", "wb") as f:
+            pkl.dump({k:v for k,v in train_model(model_and_hyperparameters, "/root/Project/jax_machinelearning/datasets/8mfsk/waveforms_CNO.pkl").items() if k != "Learning Rate"}, f)

@@ -110,6 +110,31 @@ def forward_mlp(mlp_parameters, input, activation_function = jnp.tanh):
 
     return x
 
+@jit
+def dropout(input, prob, random_key):
+    """
+    Single layer dropout function
+    """
+
+    keep_prob = 1.0 - prob
+    mask = jax.random.bernoulli(random_key, keep_prob, input.shape)
+
+    return jnp.where(mask, input, 0)
+
+@jit
+def forward_mlp_with_dropout(mlp_parameters, input, random_key, prob, activation_function = jnp.tanh):
+    # Forward pass of the MLP
+    
+    x = input
+
+    for W, b in mlp_parameters:
+        x = dropout(x, prob, random_key)
+        x = x @ W + b
+        x = activation_function(x)
+
+    return x
+
+
 def forward_mlp_linear_with_classification(mlp_parameters, input, activation_function = jnp.tanh):
     
     x = input
@@ -129,6 +154,8 @@ def forward_mlp_linear_with_classification(mlp_parameters, input, activation_fun
 
     return x
 
+
+
 def layer_normalization(activations):
     mu  = jnp.mean(activations)
     sigma = jnp.std(activations)
@@ -145,7 +172,7 @@ def mean_pooling(sequence_to_pool):
 def sum_pooling(sequence_to_pool):
     return jnp.sum(sequence_to_pool, axis=0)
 
-def model_forward(input_sequence, parameters):
+def model_forward(input_sequence, parameters, training = True):
     """
     The model forward function, which takes in the input sequence and the parameters and returns the output of the model.
 
@@ -184,6 +211,13 @@ def model_grad(input_sequence, target_sequence, parameters):
 
 @jit
 def accuracy(input_sequences, target_sequences, parameters):
+    """
+    Perfrom a batch accuracy measuremet
+
+    input_sequences = [waveform1, waveform2] where waveform.shape = (len(waveform, 1))
+    target_sequences = [one_hot(int), one_hot(int), one_hot(int)]
+    parameters = model parameters
+    """
     y = batch_model_forward(input_sequences, parameters)
     return jnp.mean(jnp.argmax(y, axis=1) == jnp.argmax(target_sequences, axis=1))
 
@@ -220,7 +254,7 @@ def load_data(data_file_path, batch_size, targets, test_ratio = 0.8):
     test_sequences = jnp.array([x[0] for x in shuffled_data[int(0.8*len(shuffled_data)):]]).reshape((len(shuffled_data) - int(0.8*len(shuffled_data)),len(shuffled_data[0][0]),1))
 
     train_labels = one_hot(jnp.array([x[1] for x in shuffled_data[:int(0.8*len(shuffled_data))]]), targets)
-    test_labels = test_labels = one_hot(jnp.array([x[1] for x in shuffled_data[int(0.8*len(shuffled_data)):]]), targets)
+    test_labels = one_hot(jnp.array([x[1] for x in shuffled_data[int(0.8*len(shuffled_data)):]]), targets)
 
     # Batch the sequences
     train_sequences = train_sequences.reshape((int(0.8*len(shuffled_data)/batch_size),batch_size,-1,1))
@@ -228,7 +262,5 @@ def load_data(data_file_path, batch_size, targets, test_ratio = 0.8):
 
     train_labels = train_labels.reshape((int(0.8*len(shuffled_data)/batch_size),batch_size,-1))
     test_labels = test_labels.reshape((int((len(shuffled_data) - int(0.8*len(shuffled_data)))/batch_size),batch_size,-1))
-
-    # .reshape((int(0.8*len(shuffled_data)/batch_size),batch_size,-1,1))
 
     return train_sequences, train_labels, test_sequences, test_labels
