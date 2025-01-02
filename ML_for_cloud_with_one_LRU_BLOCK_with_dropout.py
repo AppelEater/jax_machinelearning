@@ -15,12 +15,13 @@ def train_model(model_and_hyper_parameters_for_function, data_file_path):
 
     return : None
     """
-    print("Before load")
+
+    # Key
+    key = jax.random.key(134)
 
     # Load the data
     train_sequences, train_labels, test_sequences, test_labels = load_data(data_file_path, model_and_hyper_parameters_for_function["batch_size "], 9)
 
-    print(test_labels.shape)
 
     # Train the model
     model_parameters = model_and_hyper_parameters_for_function["Model Parameters"]
@@ -41,13 +42,16 @@ def train_model(model_and_hyper_parameters_for_function, data_file_path):
 
     epoch_model_parameters = [model_and_hyper_parameters_for_function["Model Parameters"]]
 
+    prob = model_and_hyper_parameters_for_function["Dropout"]
+
     # Train the model
     for epoch in range(model_and_hyper_parameters_for_function["epochs"]):
         with alive_bar(len(train_sequences)) as bar:
             for i in range(len(train_sequences)):
-                grads = model_grad(train_sequences[i], train_labels[i], model_parameters)
+                grads = model_grad2(train_sequences[i], train_labels[i], model_parameters, prob, key, True)
                 updates, opt_state = optimizer.update(grads, opt_state)
                 model_parameters = optax.apply_updates(model_parameters, updates)
+                key, _ = jax.random.split(key)
                 bar()
 
         # Calculate the loss and accuracy
@@ -69,7 +73,7 @@ def train_model(model_and_hyper_parameters_for_function, data_file_path):
     return model_and_hyper_parameters_for_function
 
 # Dataset file path
-dataset_file_path = "/root/Project/jax_machinelearning/datasets/8mfsk/accu_test_waveforms_CNO_[15],[0.01]_and[0]_samprate_2000.pkl"
+dataset_file_path = "/root/Project/jax_machinelearning/datasets/8mfsk/test_set_waveforms_CNO_[15, 20],[16.666666666666668]_and[0, 0.01].pkl"
 
 
 
@@ -81,38 +85,43 @@ batch_sizes = [15]
 boundaries = [7200, 9600, 12000]  # Steps where LR changes
 values = [0.0002, 0.00015, 0.0001, 0.00005]  # LR for each interval
 learning_rates = [0.0002] 
+dropout_list = [0.025, 0.05, 0.075, 0.1]
+LRU_memory_list = [256, 350 ,512]
 # optax.piecewise_constant_schedule(
 #     init_value=0.0002,
 #     boundaries_and_scales=dict(zip(boundaries, values[1:])),
 # )
 
-mem_size_set = [10,25,50,100,256]
 
 # FROM GRID SEARCH SEVEN THE DICTIONARY CHANGES, LEARNING RATE CAN NO LONGER BE SAVED BY IT SELF AS IT CAN BE A SCHEDULE
 
 
-# Define the hyperparameters and model
-for i in range(4): 
-    for idx, learning_rate in enumerate(learning_rates):
-        for mem_size in mem_size_set:
-            # Define the model
-            Encoding_layer = init_mlp_parameters([1,3,5,10])
-            LRU_sub_1 = init_lru_parameters(mem_size, 10, r_min =0.9, r_max=0.999)
-            LRU_nonlinear_part = init_mlp_parameters([10,10,10])
-            Decoding_layer = init_mlp_parameters([10,10,9])
-            model_and_hyperparameters = {"Model Parameters" : (Encoding_layer, LRU_sub_1, LRU_nonlinear_part, Decoding_layer),
-                                        "Learning Rate" : learning_rate,
-                                        "batch_size " : 15,
-                                        "epochs" : 20,
-                                        "optimizer" : "Adam",
-                                        "loss_function" : "CrossEntropy",
-                                        "metric" : "Accuracy",
-                                        "training dataset circumstance" : "MFSK signal, with 100 Hz spacing and 2kHz sampling rate and different memsizes",
-                                        "File Path" : dataset_file_path,
-                                        "Learning Schedule": { 
-                                                    "Schedule Type": "Constant",
-                                                    "Learning_rate": learning_rate
-                                        } }
 
-            with open(f"grid_search13/results{idx} time {datetime.now()}.pkl", "wb") as f:
-                pkl.dump({k:v for k,v in train_model(model_and_hyperparameters, dataset_file_path).items() if k != "Learning Rate"}, f)
+# Define the hyperparameters and model
+for i in range(2):
+    for mem_size in LRU_memory_list :
+        # Define the model
+        Encoding_layer = init_mlp_parameters([1,3,5,10])
+        LRU_sub_1 = init_lru_parameters(mem_size, 10, r_min =0.9, r_max=0.999)
+        LRU_nonlinear_part = init_mlp_parameters([10,10,10])
+        Decoding_layer = init_mlp_parameters([10,10,9])
+
+        for drop_out in dropout_list:
+            for idx, learning_rate in enumerate(learning_rates):
+                model_and_hyperparameters = {"Model Parameters" : (Encoding_layer, LRU_sub_1, LRU_nonlinear_part, Decoding_layer),
+                                            "Learning Rate" : learning_rate,
+                                            "batch_size " : 15,
+                                            "epochs" : 25,
+                                            "optimizer" : "Adam",
+                                            "Dropout" : drop_out,
+                                            "loss_function" : "CrossEntropy",
+                                            "metric" : "Accuracy",
+                                            "training dataset circumstanct" : "MFSK signal, with DU [0 0.01 ] and DRU [16.66]. CN0 varies between [15, 20] dbHz",
+                                            "Learning Schedule": {  
+                                                        "Schedule Type": "Piecewise Constant",
+                                                        "Bounds": boundaries,
+                                                        "Values": values
+                                            } }
+
+                with open(f"grid_search9/results{idx} time {datetime.now()}.pkl", "wb") as f:
+                    pkl.dump({k:v for k,v in train_model(model_and_hyperparameters, dataset_file_path).items() if k != "Learning Rate"}, f)

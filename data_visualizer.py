@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import jax.numpy as jnp
 
-gloober = glob.glob("grid_search7/*")
+gloober = glob.glob("grid_search10/*")
 
 
 ##### Figures to be plotted #####
@@ -43,6 +43,7 @@ with open(gloober[best_yet_acc[1]], "rb") as f:
 
 print(dict.keys())
 
+print(dict["Dropout"])
 
 ax.plot(dict["Accuracy Measurements"]["Testing accuracy"], label = f'Learning rate] & Batch size {dict["batch_size "] }')
 ax.set_xlabel("Epoch")

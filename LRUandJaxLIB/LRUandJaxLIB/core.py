@@ -122,16 +122,17 @@ def dropout(input, prob, random_key):
     return jnp.where(mask, input, 0)
 
 @jit
-def forward_mlp_with_dropout(mlp_parameters, input, random_key, prob, activation_function = jnp.tanh):
-    # Forward pass of the MLP
+def forward_mlp_with_dropout(mlp_parameters, input, random_key, prob, Training = True, activation_function = jnp.tanh):
+    # Forward pass of the MLP with dropout
     
     x = input
+
 
     for W, b in mlp_parameters:
         x = dropout(x, prob, random_key)
         x = x @ W + b
         x = activation_function(x)
-
+        random_key, _ = jax.random.split(random_key)
     return x
 
 
@@ -189,6 +190,7 @@ def model_forward(input_sequence, parameters, training = True):
     x = forward_mlp_linear_with_classification(Linear_decoder_parameter, x)
 
     return x
+
 
 # Batch model forward
 batch_model_forward = vmap(model_forward, in_axes=(0, None))
