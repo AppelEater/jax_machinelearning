@@ -9,7 +9,7 @@
 
 # Overview of the grid_search performances
 
-- Grid search one
+- Grid search 4-7 Checking learning values
 
 - Grid search 9 with dropout
 
@@ -22,3 +22,4 @@
 - Visualiser data_visualizer_test_case,ipynb : test_best_accuracy.pdf, The_different_rates.pdf 
 
 - Grid search 13 : Test of 2 kHz with different sizes of LRU memory state, 10-25-50-100-256
+- Visualizer data_visualizer_mem_sizes.ipynb , "Different_mem_sizes.pdf"
