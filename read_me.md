@@ -23,3 +23,7 @@
 
 - Grid search 13 : Test of 2 kHz with different sizes of LRU memory state, 10-25-50-100-256
 - Visualizer data_visualizer_mem_sizes.ipynb , "Different_mem_sizes.pdf"
+
+- Grid Search 14 : Test of lessend phase upon intilisation [14.2],[16.666666666666668]_and[0.05]_samprate_1600
+- 
+

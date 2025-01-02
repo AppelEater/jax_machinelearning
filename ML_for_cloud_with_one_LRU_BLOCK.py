@@ -69,7 +69,7 @@ def train_model(model_and_hyper_parameters_for_function, data_file_path):
     return model_and_hyper_parameters_for_function
 
 # Dataset file path
-dataset_file_path = "/root/Project/jax_machinelearning/datasets/8mfsk/accu_test_waveforms_CNO_[15],[0.01]_and[0]_samprate_2000.pkl"
+dataset_file_path = "/root/Project/jax_machinelearning/datasets/8mfsk/accu_test_waveforms_CNO_[14.2],[16.666666666666668]_and[0.05]_samprate_1600.pkl"
 
 
 
@@ -80,26 +80,27 @@ batch_sizes = [15]
 # Learning rate
 boundaries = [7200, 9600, 12000]  # Steps where LR changes
 values = [0.0002, 0.00015, 0.0001, 0.00005]  # LR for each interval
-learning_rates = [0.0002] 
+learning_rates = [0.0002, 0.00025, 0.00015] 
 # optax.piecewise_constant_schedule(
 #     init_value=0.0002,
 #     boundaries_and_scales=dict(zip(boundaries, values[1:])),
 # )
 
-mem_size_set = [10,25,50,100,256]
+mem_size_set = [256]
 
 # FROM GRID SEARCH SEVEN THE DICTIONARY CHANGES, LEARNING RATE CAN NO LONGER BE SAVED BY IT SELF AS IT CAN BE A SCHEDULE
 
 
 # Define the hyperparameters and model
-for i in range(4): 
+for i in range(3): 
     for idx, learning_rate in enumerate(learning_rates):
         for mem_size in mem_size_set:
             # Define the model
             Encoding_layer = init_mlp_parameters([1,3,5,10])
-            LRU_sub_1 = init_lru_parameters(mem_size, 10, r_min =0.9, r_max=0.999)
+            LRU_sub_1 = init_lru_parameters(mem_size, 10, r_min =0.9, r_max=0.999, max_phase=np.pi/10)
             LRU_nonlinear_part = init_mlp_parameters([10,10,10])
             Decoding_layer = init_mlp_parameters([10,10,9])
+            
             model_and_hyperparameters = {"Model Parameters" : (Encoding_layer, LRU_sub_1, LRU_nonlinear_part, Decoding_layer),
                                         "Learning Rate" : learning_rate,
                                         "batch_size " : 15,
@@ -107,12 +108,12 @@ for i in range(4):
                                         "optimizer" : "Adam",
                                         "loss_function" : "CrossEntropy",
                                         "metric" : "Accuracy",
-                                        "training dataset circumstance" : "MFSK signal, with 100 Hz spacing and 2kHz sampling rate and different memsizes",
+                                        "training dataset circumstance" : "MFSK signal, with 100 Hz spacing and 1.6kHz sampling rate with different learning rates and init phases pi/10",
                                         "File Path" : dataset_file_path,
                                         "Learning Schedule": { 
                                                     "Schedule Type": "Constant",
                                                     "Learning_rate": learning_rate
                                         } }
 
-            with open(f"grid_search13/results{idx} time {datetime.now()}.pkl", "wb") as f:
+            with open(f"grid_search14/results{idx} time {datetime.now()}.pkl", "wb") as f:
                 pkl.dump({k:v for k,v in train_model(model_and_hyperparameters, dataset_file_path).items() if k != "Learning Rate"}, f)
