@@ -2,9 +2,9 @@ import glob
 import pickle as pkl
 import matplotlib.pyplot as plt
 import numpy as np
-import jax.numpy as jnp
+#import jax.numpy as jnp
 
-gloober = glob.glob("grid_search10/*")
+gloober = glob.glob("grid_search9/*")
 
 
 ##### Figures to be plotted #####
@@ -45,7 +45,7 @@ print(dict.keys())
 
 print(dict["Dropout"])
 
-ax.plot(dict["Accuracy Measurements"]["Testing accuracy"], label = f'Learning rate] & Batch size {dict["batch_size "] }')
+ax.plot(dict["Accuracy Measurements"]["Testing accuracy"], label = f'Learning rate 0.0002 & Batch size {dict["batch_size "] }')
 ax.set_xlabel("Epoch")
 ax.set_ylabel("Accuracy %")
 
@@ -53,19 +53,20 @@ fig.legend()
 ax2.plot(dict["Loss Measurements"]["Testing loss"], color="r")
 ax2.set_ylabel("Testing Loss", color = "r")
 
-plt.savefig("Second grid search.png")
+plt.savefig("Dropout.pdf")
 
-# Heat map of max test accuracy, with the axes learning rate and batch size
-learning_rates = jnp.logspace(-4,-7,5)
-batch_sizes = np.arange(5,25,5)
+# # Heat map of max test accuracy, with the axes learning rate and batch size
+# learning_rates = jnp.logspace(-4,-7,5)
+# batch_sizes = np.arange(5,25,5)
 
 
 
-heat_map_array = np.array(list_of_best_acc).reshape(len(list_of_best_acc),1)
+# heat_map_array = np.array(list_of_best_acc).reshape(len(list_of_best_acc),1)
 
-fig, ax = plt.subplots()
 
-im = ax.imshow(heat_map_array)
+# fig, ax = plt.subplots()
 
-fig.colorbar(im, ax=ax, label= "Colorbar")
-plt.savefig(f"Second Heat map grid search")
+# im = ax.imshow(heat_map_array)
+
+# fig.colorbar(im, ax=ax, label= "Colorbar")
+# plt.savefig(f"Dropout")
