@@ -97,7 +97,7 @@ for i in range(3):
         for mem_size in mem_size_set:
             # Define the model
             Encoding_layer = init_mlp_parameters([1,3,5,10])
-            LRU_sub_1 = init_lru_parameters(mem_size, 10, r_min =0.9, r_max=0.999, max_phase=np.pi/10)
+            LRU_sub_1 = init_lru_parameters(mem_size, 10, r_min =0.9, r_max=0.999)
             LRU_nonlinear_part = init_mlp_parameters([10,10,10])
             Decoding_layer = init_mlp_parameters([10,10,9])
             
