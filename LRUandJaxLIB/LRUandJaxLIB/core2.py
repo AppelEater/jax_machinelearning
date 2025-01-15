@@ -67,3 +67,4 @@ def accuracy2(input_sequences, target_sequences, parameters, prob, key, training
     return jnp.mean(jnp.argmax(y, axis=1) == jnp.argmax(target_sequences, axis=1))
 
 batch_model_grad2 = vmap(model_grad2, in_axes=(0, 0, None, None, None, None))
+

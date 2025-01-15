@@ -13,6 +13,8 @@ gloober = glob.glob("grid_search9/*")
 
 fig, ax = plt.subplots()
 
+
+
 ax2 = ax.twinx()
 
 best_yet_acc = [0, 0]
@@ -45,9 +47,11 @@ print(dict.keys())
 
 print(dict["Dropout"])
 
+print(dict["training dataset circumstanct"])
+
 ax.plot(dict["Accuracy Measurements"]["Testing accuracy"], label = f'Learning rate 0.0002 & Batch size {dict["batch_size "] }')
 ax.set_xlabel("Epoch")
-ax.set_ylabel("Accuracy %")
+ax.set_ylabel("Accuracy [%]")
 
 fig.legend()
 ax2.plot(dict["Loss Measurements"]["Testing loss"], color="r")

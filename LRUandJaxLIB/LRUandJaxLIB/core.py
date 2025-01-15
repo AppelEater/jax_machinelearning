@@ -61,6 +61,8 @@ def init_lru_parameters(N, H, r_min = 0.0, r_max = 1, max_phase = 6.28):
     return nu_log, theta_log, B_re, B_im, C_re, C_im, D, gamma_log
 
 
+
+
 def forward_LRU(lru_parameters, input_sequence):
     # Unpack the LRU parameters
     nu_log, theta_log, B_re, B_im, C_re, C_im, D, gamma_log = lru_parameters
@@ -252,17 +254,108 @@ def load_data(data_file_path, batch_size, targets, test_ratio = 0.8):
     shuffled_data = [data[i] for i in perm]
 
     # make the data split
-    train_sequences = jnp.array([x[0] for x in shuffled_data[:int(0.8*len(shuffled_data))]]).reshape((int(0.8*len(shuffled_data)),len(shuffled_data[0][0]),1))
-    test_sequences = jnp.array([x[0] for x in shuffled_data[int(0.8*len(shuffled_data)):]]).reshape((len(shuffled_data) - int(0.8*len(shuffled_data)),len(shuffled_data[0][0]),1))
+    train_sequences = jnp.array([x[0] for x in shuffled_data[:int(test_ratio*len(shuffled_data))]]).reshape((int(test_ratio*len(shuffled_data)),len(shuffled_data[0][0]),1))
+    test_sequences = jnp.array([x[0] for x in shuffled_data[int(test_ratio*len(shuffled_data)):]]).reshape((len(shuffled_data) - int(test_ratio*len(shuffled_data)),len(shuffled_data[0][0]),1))
 
-    train_labels = one_hot(jnp.array([x[1] for x in shuffled_data[:int(0.8*len(shuffled_data))]]), targets)
-    test_labels = one_hot(jnp.array([x[1] for x in shuffled_data[int(0.8*len(shuffled_data)):]]), targets)
+    train_labels = one_hot(jnp.array([x[1] for x in shuffled_data[:int(test_ratio*len(shuffled_data))]]), targets)
+    test_labels = one_hot(jnp.array([x[1] for x in shuffled_data[int(test_ratio*len(shuffled_data)):]]), targets)
 
     # Batch the sequences
-    train_sequences = train_sequences.reshape((int(0.8*len(shuffled_data)/batch_size),batch_size,-1,1))
-    test_sequences = test_sequences.reshape((int((len(shuffled_data) - int(0.8*len(shuffled_data)))/batch_size),batch_size,-1,1))
+    train_sequences = train_sequences.reshape((int(test_ratio*len(shuffled_data)/batch_size),batch_size,-1,1))
+    test_sequences = test_sequences.reshape((int((len(shuffled_data) - int(test_ratio*len(shuffled_data)))/batch_size),batch_size,-1,1))
 
-    train_labels = train_labels.reshape((int(0.8*len(shuffled_data)/batch_size),batch_size,-1))
-    test_labels = test_labels.reshape((int((len(shuffled_data) - int(0.8*len(shuffled_data)))/batch_size),batch_size,-1))
+    train_labels = train_labels.reshape((int(test_ratio*len(shuffled_data)/batch_size),batch_size,-1))
+    test_labels = test_labels.reshape((int((len(shuffled_data) - int(test_ratio*len(shuffled_data)))/batch_size),batch_size,-1))
 
     return train_sequences, train_labels, test_sequences, test_labels
+
+def load_data_stft(data_file_path, batch_size, targets, test_ratio = 0.8, window_filter = 'hann', length = 256, hop = 256//2):
+    with open(data_file_path, "rb") as f:
+        data=pkl.load(f)
+
+    # Permutate the order of the data
+    perm = np.random.permutation(len(data))
+
+    shuffled_data = [data[i] for i in perm]
+
+    # make the data split
+    train_sequences = jnp.array([x[0] for x in shuffled_data[:int(test_ratio*len(shuffled_data))]])
+    test_sequences = jnp.array([x[0] for x in shuffled_data[int(test_ratio*len(shuffled_data)):]])
+
+    train_labels = one_hot(jnp.array([x[1] for x in shuffled_data[:int(test_ratio*len(shuffled_data))]]), targets)
+    test_labels = one_hot(jnp.array([x[1] for x in shuffled_data[int(test_ratio*len(shuffled_data)):]]), targets)
+
+    
+    # Perform the stft of dataset
+    train_sequences = jax.vmap(lambda input: jnp.abs(jnp.transpose(jax.scipy.signal.stft(input, fs=2000, window=window_filter, nperseg=length, noverlap = hop, return_onesided=True)[2])))(train_sequences)
+    test_sequences = jax.vmap(lambda input: jnp.abs(jnp.transpose(jax.scipy.signal.stft(input, fs=2000, window=window_filter, nperseg=length, noverlap = hop, return_onesided=True)[2])))(test_sequences)
+
+
+    # Batch the sequences
+    train_sequences = train_sequences.reshape((int(test_ratio*len(shuffled_data)/batch_size),batch_size,train_sequences.shape[1],train_sequences.shape[2]))
+    test_sequences = test_sequences.reshape((int((len(shuffled_data) - int(test_ratio*len(shuffled_data)))/batch_size),batch_size,test_sequences.shape[1],test_sequences.shape[2]))
+
+    train_labels = train_labels.reshape((int(test_ratio*len(shuffled_data)/batch_size),batch_size,-1))
+    test_labels = test_labels.reshape((int((len(shuffled_data) - int(test_ratio*len(shuffled_data)))/batch_size),batch_size,-1))
+
+    return train_sequences, train_labels, test_sequences, test_labels
+
+    
+
+
+def init_lru_parameters_uneven(N, H_in, H_out, r_min = 0.0, r_max = 1, max_phase = 6.28):
+    """
+    Initialize the LRU parameters
+
+    N : integer, the state dimension (Memory)
+    H_in : integer, the model dimension (Input dimension)
+    H_out : integer, the model dimensions output (Output Dimesion.)
+    r_min : float, the minimum value of the radius of the complex number
+    r_max : float, the maximum value of the radius of the complex number
+    max_phase : float, the maximum value of the phase of the complex number
+
+    return : tuple, the LRU parameters
+
+    """
+    # N: state dimension, H: model dimension
+    # Initialization of Lambda is complex valued distributed uniformly on ring
+    # between r_min and r_max, with phase in [0, max_phase].
+
+    u1 = np.random.uniform(size = (N,))
+    u2 = np.random.uniform(size = (N,))
+
+    nu_log = np.log(-0.5*np.log(u1*(r_max**2-r_min**2) + r_min**2))
+    theta_log = np.log(max_phase*u2)
+
+    # Glorot initialized Input/Output projection matrices
+    B_re = np.random.normal(size=(N,H_in))/np.sqrt(2*H_in)
+    B_im = np.random.normal(size=(N,H_in))/np.sqrt(2*H_in)
+    C_re = np.random.normal(size=(H_out,N))/np.sqrt(N)
+    C_im = np.random.normal(size=(H_out,N))/np.sqrt(N)
+    D = np.random.normal(size=(H_out,H_in))/np.sqrt(H_in)
+
+    # Normalization
+    diag_lambda = np.exp(-np.exp(nu_log) + 1j*np.exp(theta_log))
+    gamma_log = np.log(np.sqrt(1-np.abs(diag_lambda)**2))
+
+    return nu_log, theta_log, B_re, B_im, C_re, C_im, D, gamma_log
+
+def forward_LRU_uneven(lru_parameters, input_sequence):
+    # Unpack the LRU parameters
+    nu_log, theta_log, B_re, B_im, C_re, C_im, D, gamma_log = lru_parameters
+
+    # Initialize the hidden state
+    Lambda = jnp.exp(-jnp.exp(nu_log) + 1j*jnp.exp(theta_log))
+    B_norm = (B_re + 1j*B_im) * jnp.expand_dims(jnp.exp(gamma_log), axis=-1)
+    #print(B_norm.shape)
+    C = C_re + 1j*C_im
+
+    Lambda_elements = jnp.repeat(Lambda[None, ...], input_sequence.shape[0], axis=0)
+
+    Bu_elements = jax.vmap(lambda u: B_norm @ u)(input_sequence)
+    elements = (Lambda_elements, Bu_elements)
+    _, inner_states = parallel_scan(binary_operator_diag, elements) # all x_k
+    y = jax.vmap(lambda x, u: (C @ x).real + D @ u )(inner_states, input_sequence)
+
+
+    return y
