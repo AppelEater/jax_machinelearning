@@ -51,6 +51,7 @@ def train_model(model_and_hyper_parameters_for_function, data_file_path, key):
 
     # Train the model
     for epoch in range(model_and_hyper_parameters_for_function["epochs"]):
+        
         with alive_bar(len(train_sequences)) as bar:
             for i in range(len(train_sequences)):
                 grads = model_grad3(train_sequences[i], train_labels[i], model_parameters, prob, key, True)
@@ -86,8 +87,8 @@ key = jax.random.key(135)
 
 # Batch size
 batch_sizes = [100]
-learning_rates = [0.0002, 0.0004, 0.0001] 
-dropout_list = [0.025]
+learning_rates = [0.0001, 0.00009] 
+dropout_list = [0.025, 0.05]
 LRU_memory_list = [526]
 
 
@@ -108,12 +109,12 @@ LRU_memory_list = [526]
 for mem_size in LRU_memory_list :
     for i in range(4):
         # Define the model
-        Encoding_layer = init_mlp_parameters([129,129])
-        LRU_sub_1 = init_lru_parameters(mem_size, 129, r_min =0.9, r_max=0.999)
-        LRU_Mixer_1 = init_mlp_parameters([129,129,129])
-        LRU_sub_2 = init_lru_parameters(mem_size, 129, r_min =0.9, r_max=0.999)
-        LRU_Mixer_2 = init_mlp_parameters([129,129])
-        Decoding_layer = init_mlp_parameters([129,50,9])
+        Encoding_layer = init_mlp_parameters([257,257])
+        LRU_sub_1 = init_lru_parameters(mem_size, 257, r_min =0.9, r_max=0.999)
+        LRU_Mixer_1 = init_mlp_parameters([257,257,257])
+        LRU_sub_2 = init_lru_parameters(mem_size, 257, r_min =0.9, r_max=0.999)
+        LRU_Mixer_2 = init_mlp_parameters([257,257])
+        Decoding_layer = init_mlp_parameters([257,100,9])
 
         for drop_out in dropout_list:
             for idx, learning_rate in enumerate(learning_rates):
@@ -125,8 +126,8 @@ for mem_size in LRU_memory_list :
                                             "Encoding" : "STFT",
                                             "Encoding Options" : {
                                                                     "Window Filter" : 'hann',
-                                                                    "Length" : 256,
-                                                                    "Hop" : 128
+                                                                    "Length" : 512,
+                                                                    "Hop" : 256
                                                                   },
                                             "Dropout" : drop_out,
                                             "loss_function" : "CrossEntropy",
@@ -138,5 +139,5 @@ for mem_size in LRU_memory_list :
                                                         "Value" : learning_rate
                                             } }
 
-                with open(f"grid_search30/results{idx} time {datetime.now()}.pkl", "wb") as f:
+                with open(f"grid_search33/results{idx} time {datetime.now():%Y-%m-%d %H-%M-%S.%f}.pkl", "wb") as f:                
                     pkl.dump({k:v for k,v in train_model(model_and_hyperparameters, dataset_file_path, key).items() if k != "Learning Rate"}, f)

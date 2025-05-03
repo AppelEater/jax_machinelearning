@@ -115,5 +115,5 @@ for i in range(3):
                                                     "Learning_rate": learning_rate
                                         } }
 
-            with open(f"grid_search14/results{idx} time {datetime.now()}.pkl", "wb") as f:
+            with open(f"grid_search14/results{idx} time {datetime.now():%Y-%m-%d %H-%M-%S.%f}.pkl", "wb") as f:                
                 pkl.dump({k:v for k,v in train_model(model_and_hyperparameters, dataset_file_path).items() if k != "Learning Rate"}, f)
