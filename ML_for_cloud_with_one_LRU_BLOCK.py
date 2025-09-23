@@ -3,6 +3,28 @@ from alive_progress import alive_bar
 from datetime import datetime
 import optax
 
+#
+# Input parameters
+#
+
+# Dataset file path
+dataset_file_path = "/root/Project/jax_machinelearning/datasets/8mfsk/accu_test_waveforms_CNO_[14.2],[16.666666666666668]_and[0.05]_samprate_1600.pkl"
+
+# Output folder
+output_folder_path ="/root/Project/jax_machinelearning/results/grid_search14"
+
+# Batch size
+batch_sizes = [15]
+
+# Learning rate
+learning_rates = [0.0002, 0.00025, 0.00015] 
+# boundaries = [7200, 9600, 12000]  # Steps where LR changes
+# values = [0.0002, 0.00015, 0.0001, 0.00005]  # LR for each interval
+
+# Memory size
+LRU_memory_list = [256]
+
+# -----------------------------------------------------------------------------
 
 # Make a train model function
 #
@@ -73,24 +95,12 @@ def train_model(model_and_hyper_parameters_for_function, data_file_path):
 
     return model_and_hyper_parameters_for_function
 
-# Dataset file path
-dataset_file_path = "/root/Project/jax_machinelearning/datasets/8mfsk/accu_test_waveforms_CNO_[14.2],[16.666666666666668]_and[0.05]_samprate_1600.pkl"
+# -----------------------------------------------------------------------------
 
-
-# Batch size
-batch_sizes = [15]
-
-# Learning rate
-learning_rates = [0.0002, 0.00025, 0.00015] 
-
-# boundaries = [7200, 9600, 12000]  # Steps where LR changes
-# values = [0.0002, 0.00015, 0.0001, 0.00005]  # LR for each interval
 # optax.piecewise_constant_schedule(
 #     init_value=0.0002,
 #     boundaries_and_scales=dict(zip(boundaries, values[1:])),
 # )
-
-LRU_memory_list = [256]
 
 # Define the hyperparameters and model
 
@@ -108,6 +118,7 @@ for mem_size in LRU_memory_list:
                                         "batch_size " : 15,
                                         "epochs" : 20,
                                         "optimizer" : "Adam",
+                                        "Encoding" : "Raw",
                                         "loss_function" : "CrossEntropy",
                                         "metric" : "Accuracy",
                                         "training dataset circumstance" : "MFSK signal, with 100 Hz spacing and 1.6kHz sampling rate with different learning rates and init phases pi/10",
@@ -117,5 +128,5 @@ for mem_size in LRU_memory_list:
                                                     "Learning_rate": learning_rate
                                         } }
 
-            with open(f"grid_search14/results{idx} time {datetime.now():%Y-%m-%d %H-%M-%S.%f}.pkl", "wb") as f:                
+            with open(f"{output_folder_path}/results{idx} time {datetime.now():%Y-%m-%d %H-%M-%S.%f}.pkl", "wb") as f:                
                 pkl.dump({k:v for k,v in train_model(model_and_hyperparameters, dataset_file_path).items() if k != "Learning Rate"}, f)

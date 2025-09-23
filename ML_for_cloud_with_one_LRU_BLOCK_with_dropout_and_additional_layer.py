@@ -78,17 +78,17 @@ def train_model(model_and_hyper_parameters_for_function, data_file_path, key):
         
         with alive_bar(len(train_sequences)) as bar:
             for i in range(len(train_sequences)):
-                grads = model_grad2(train_sequences[i], train_labels[i], model_parameters, prob, key, True)
+                grads = model_grad3(train_sequences[i], train_labels[i], model_parameters, prob, key, True)
                 updates, opt_state = optimizer.update(grads, opt_state, model_parameters)
                 model_parameters = optax.apply_updates(model_parameters, updates)
                 key, _ = jax.random.split(key)
                 bar()
 
         # Calculate the loss and accuracy
-        train_acc.append(np.mean([accuracy2(jnp.array(x), jnp.array(y), model_parameters, 0,key,False) for x, y in zip(train_sequences, train_labels)]))
-        test_acc.append(np.mean([accuracy2(jnp.array(x), jnp.array(y), model_parameters, 0,key,False) for x, y in zip(test_sequences, test_labels)]))
-        train_loss.append(np.mean([loss_fn2(jnp.array(x), jnp.array(y), model_parameters, 0,key,False) for x, y in zip(train_sequences, train_labels)]))
-        test_loss.append(np.mean([loss_fn2(jnp.array(x), jnp.array(y), model_parameters, 0,key, False) for x, y in zip(test_sequences, test_labels)]))
+        train_acc.append(np.mean([accuracy3(jnp.array(x), jnp.array(y), model_parameters, 0,key,False) for x, y in zip(train_sequences, train_labels)]))
+        test_acc.append(np.mean([accuracy3(jnp.array(x), jnp.array(y), model_parameters, 0,key,False) for x, y in zip(test_sequences, test_labels)]))
+        train_loss.append(np.mean([loss_fn3(jnp.array(x), jnp.array(y), model_parameters, 0,key,False) for x, y in zip(train_sequences, train_labels)]))
+        test_loss.append(np.mean([loss_fn3(jnp.array(x), jnp.array(y), model_parameters, 0,key, False) for x, y in zip(test_sequences, test_labels)]))
         print(f"Test acc {test_acc}")
         epoch_model_parameters.append(model_parameters)
 
@@ -118,13 +118,15 @@ for mem_size in LRU_memory_list :
     for i in range(4):
         # Define the model
         Encoding_layer = init_mlp_parameters([257,257])
-        LRU_sub = init_lru_parameters(mem_size, 257, r_min =0.9, r_max=0.999)
-        LRU_Mixer = init_mlp_parameters([257,257,257])
+        LRU_sub_1 = init_lru_parameters(mem_size, 257, r_min =0.9, r_max=0.999)
+        LRU_Mixer_1 = init_mlp_parameters([257,257,257])
+        LRU_sub_2 = init_lru_parameters(mem_size, 257, r_min =0.9, r_max=0.999)
+        LRU_Mixer_2 = init_mlp_parameters([257,257])
         Decoding_layer = init_mlp_parameters([257,100,9])
 
         for idx, learning_rate in enumerate(learning_rates):
             for drop_out in dropout_list:
-                model_and_hyperparameters = {"Model Parameters" : (Encoding_layer, LRU_sub, LRU_Mixer, Decoding_layer),
+                model_and_hyperparameters = {"Model Parameters" : (Encoding_layer, LRU_sub_1, LRU_Mixer_1, LRU_sub_2, LRU_Mixer_2, Decoding_layer),
                                             "Learning Rate" : learning_rate,
                                             "batch_size " : 100,
                                             "epochs" : 20,
