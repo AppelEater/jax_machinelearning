@@ -16,7 +16,6 @@ def train_model(model_and_hyper_parameters_for_function, data_file_path, key):
     return : None
     """
 
- 
 
     # Load the data
     if model_and_hyper_parameters_for_function["Encoding"] == "STFT":
@@ -78,31 +77,30 @@ def train_model(model_and_hyper_parameters_for_function, data_file_path, key):
 
     return model_and_hyper_parameters_for_function
 
-# Dataset file path
-dataset_file_path = "/root/Project/jax_machinelearning/datasets/8mfsk/absolute_doppler_waveforms_CNO_[14.2],[16.67]_and90_samprate_2000_1736935556.6539564.pkl"
 
 # Key
 key = jax.random.key(135)
 
+# Dataset file path
+dataset_file_path = "/root/Project/jax_machinelearning/datasets/8mfsk/absolute_doppler_waveforms_CNO_[14.2],[16.67]_and90_samprate_2000_1736935556.6539564.pkl"
+
 
 # Batch size
 batch_sizes = [100]
+
+# Learning rate
 learning_rates = [0.0001, 0.00009] 
-dropout_list = [0.025, 0.05]
-LRU_memory_list = [526]
 
-
-
-
+# boundaries = [7200, 9600, 12000]  # Steps where LR changes
+# values = [0.0002, 0.00015, 0.0001, 0.00005]  # LR for each interval
 # optax.piecewise_constant_schedule(
 #     init_value=0.0002,
 #     boundaries_and_scales=dict(zip(boundaries, values[1:])),
 # )
 
+LRU_memory_list = [526]
 
-
-
-
+dropout_list = [0.025, 0.05]
 
 # Define the hyperparameters and model
 
@@ -116,8 +114,8 @@ for mem_size in LRU_memory_list :
         LRU_Mixer_2 = init_mlp_parameters([257,257])
         Decoding_layer = init_mlp_parameters([257,100,9])
 
-        for drop_out in dropout_list:
-            for idx, learning_rate in enumerate(learning_rates):
+        for idx, learning_rate in enumerate(learning_rates):
+            for drop_out in dropout_list:
                 model_and_hyperparameters = {"Model Parameters" : (Encoding_layer, LRU_sub_1, LRU_Mixer_1, LRU_sub_2, LRU_Mixer_2, Decoding_layer),
                                             "Learning Rate" : learning_rate,
                                             "batch_size " : 100,
