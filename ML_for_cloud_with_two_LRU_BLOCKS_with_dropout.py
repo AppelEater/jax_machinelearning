@@ -11,7 +11,7 @@ import optax
 dataset_file_path = "/root/Project/jax_machinelearning/datasets/8mfsk/absolute_doppler_waveforms_CNO_[14.2],[16.67]_and90_samprate_2000_1736935556.6539564.pkl"
 
 # Output folder
-output_folder_path ="/root/Project/jax_machinelearning/results/grid_search33"
+output_folder_path ="/root/Project/jax_machinelearning/results/grid_search34"
 
 # Batch size
 batch_sizes = [100]
@@ -140,7 +140,7 @@ for mem_size in LRU_memory_list :
                                             "Dropout" : drop_out,
                                             "loss_function" : "CrossEntropy",
                                             "metric" : "Accuracy",
-                                            "training dataset circumstanct" : "MFSK signal with 90 Hz doppler uncertainty and 16.67 Hz/s doppler rate uncertainty, 14.2 db/Hz. STFT",
+                                            "training dataset circumstance" : "MFSK signal with 90 Hz doppler uncertainty and 16.67 Hz/s doppler rate uncertainty, 14.2 db/Hz. STFT",
                                             "File Path" : dataset_file_path,
                                             "Learning Schedule": {  
                                                         "Schedule Type": "Constant",

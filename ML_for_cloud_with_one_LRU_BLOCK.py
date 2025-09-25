@@ -11,7 +11,7 @@ import optax
 dataset_file_path = "/root/Project/jax_machinelearning/datasets/8mfsk/accu_test_waveforms_CNO_[14.2],[16.666666666666668]_and[0.05]_samprate_1600.pkl"
 
 # Output folder
-output_folder_path ="/root/Project/jax_machinelearning/results/grid_search14"
+output_folder_path ="/root/Project/jax_machinelearning/results/grid_search34"
 
 # Batch size
 batch_sizes = [15]
