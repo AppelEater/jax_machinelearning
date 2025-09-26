@@ -4,13 +4,14 @@ import pickle
 start_folder = Path("results")  # your starting folder
 
 for pkl_file in start_folder.rglob("*.pkl"):
-    with open(pkl_file, "rb") as f:
-        print("")
-        try:
+
+    try:
+        with open(pkl_file, "rb") as f:
             data = pickle.load(f)
-            # do something with data
-            print(f"{pkl_file}")
-            print("  " + data.get("File Path", ""))
-            print("  " + data.get("training dataset circumstance", ""))
-        except:
-            print(f'Empty file {pkl_file}')
+    except:
+        print(f'\nEmpty file {pkl_file}')
+        continue
+
+    print(f'\n{pkl_file}')
+    print(f'  File: {data.get("File Path", "")}')
+    print(f'  Comment: {data.get("training dataset circumstance", "")}')
