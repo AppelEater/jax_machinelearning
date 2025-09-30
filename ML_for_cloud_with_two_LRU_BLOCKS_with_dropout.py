@@ -8,10 +8,10 @@ import optax
 #
 
 # Dataset file path
-dataset_file_path = "/root/Project/jax_machinelearning/datasets/8mfsk/absolute_doppler_waveforms_CNO_[14.2],[16.67]_and90_samprate_2000_1736935556.6539564.pkl"
+dataset_file_path = "./datasets/8mfsk/absolute_doppler_waveforms_CNO_[14.2],[16.67]_and90_samprate_2000_1736935556.6539564.pkl"
 
 # Output folder
-output_folder_path ="/root/Project/jax_machinelearning/results/grid_search34"
+output_folder_path ="./results/grid_search34"
 
 # Batch size
 batch_sizes = [100]
@@ -41,16 +41,10 @@ def train_model(model_and_hyper_parameters_for_function, data_file_path, key):
     return : None
     """
 
-
     # Load the data
-    if model_and_hyper_parameters_for_function["Encoding"] == "STFT":
-        train_sequences, train_labels, test_sequences, test_labels = load_data_stft(data_file_path, model_and_hyper_parameters_for_function["batch_size "], 9, 0.8,
-                                                                                    model_and_hyper_parameters_for_function["Encoding Options"]["Window Filter"],
-                                                                                    model_and_hyper_parameters_for_function["Encoding Options"]["Length"],
-                                                                                    model_and_hyper_parameters_for_function["Encoding Options"]["Hop"])
-    elif  model_and_hyper_parameters_for_function["Encoding"] == "Raw":
-        train_sequences, train_labels, test_sequences, test_labels = load_data(data_file_path, model_and_hyper_parameters_for_function["batch_size "], 9)
-
+    train_sequences, train_labels, test_sequences, test_labels = load_data(data_file_path, model_and_hyper_parameters_for_function["batch_size "], 9, 0.8,
+                                                                            model_and_hyper_parameters_for_function["Encoding"],
+                                                                            model_and_hyper_parameters_for_function.get("Encoding Options", None))
 
     # Train the model
     model_parameters = model_and_hyper_parameters_for_function["Model Parameters"]

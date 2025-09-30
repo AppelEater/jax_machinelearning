@@ -228,79 +228,91 @@ def accuracy(input_sequences, target_sequences, parameters):
 batch_model_grad = vmap(model_grad, in_axes=(0, 0, None))
 
 
-
-def load_data(data_file_path, batch_size, targets, test_ratio = 0.8):
+def load_data(data_file_path, batch_size, targets, test_ratio=0.8, encoding="raw", encoding_options=None):
     """
     Load the data from the data file path
 
-    data structure = [(Wave_sequence, target).... (Wave_sequence, target)]
+    data structure = [(Wave_sequence, target), ... ]
 
-    batch_size : integer
+    Parameters
+    ----------
+    data_file_path : str
+        Path to the pickled dataset.
+    batch_size : int
+        Batch size for returned data.
+    targets : int
+        Number of target classes.
+    test_ratio : float
+        Proportion of the dataset to use for training. (0,1]
+    encoding : str
+        "raw" → return sequences
+        "STFT" → apply STFT transform.
+    encoding_options : dict
+        Only used when encoding="STFT". Expected keys:
+            - "window_filter" (str, default "hann")
+            - "length" (int, default 256)
+            - "hop" (int, default length//2)
 
-    targets : integer
-
-    test_ratio : float between (0, 1]
-
-    return : train_sequences, train_labels, test_sequences, test_labels
+    Returns
+    -------
+    train_sequences, train_labels, test_sequences, test_labels
     """
+
+    # Read data
     with open(data_file_path, "rb") as f:
         data = pkl.load(f)
+    N_total = len(data)
+    N_train = int(test_ratio * N_total)
+    N_test = N_total - N_train
+    # Resulting shape is [N_total of ( N_samples, 1 )]
 
-
-    # Permutate the order of the data
+    # Shuffle
     perm = np.random.permutation(len(data))
-
-    # Shuffle according to the permutation
     shuffled_data = [data[i] for i in perm]
 
-    # make the data split
-    train_sequences = jnp.array([x[0] for x in shuffled_data[:int(test_ratio*len(shuffled_data))]]).reshape((int(test_ratio*len(shuffled_data)),len(shuffled_data[0][0]),1))
-    test_sequences = jnp.array([x[0] for x in shuffled_data[int(test_ratio*len(shuffled_data)):]]).reshape((len(shuffled_data) - int(test_ratio*len(shuffled_data)),len(shuffled_data[0][0]),1))
+    # Split train and test, sequences and labels
+    train_sequences = jnp.array([x[0] for x in shuffled_data[:N_train]])
+    test_sequences  = jnp.array([x[0] for x in shuffled_data[N_train:]])
+    train_labels = one_hot(jnp.array([x[1] for x in shuffled_data[:N_train]]), targets)
+    test_labels  = one_hot(jnp.array([x[1] for x in shuffled_data[N_train:]]), targets)
+    # Resulting shapes are:
+    #  train_sequences : [N_train, N_samples]
+    #  test_sequences  : [N_test, N_samples]
+    #  train_labels    : [N_train, targets]
+    #  test_labels     : [N_test, targets]
 
-    train_labels = one_hot(jnp.array([x[1] for x in shuffled_data[:int(test_ratio*len(shuffled_data))]]), targets)
-    test_labels = one_hot(jnp.array([x[1] for x in shuffled_data[int(test_ratio*len(shuffled_data)):]]), targets)
+    # === ENCODING STEP ===
+    if encoding == "Raw":
+        train_sequences = train_sequences.reshape((N_train, train_sequences.shape[1], 1))
+        test_sequences  = test_sequences.reshape((N_test, test_sequences.shape[1], 1))
+        # Resulting shapes are:
+        #  train_sequences : [N_train, N_samples, 1]
+        #  test_sequences  : [N_test, N_samples, 1]
 
-    # Batch the sequences
-    train_sequences = train_sequences.reshape((int(test_ratio*len(shuffled_data)/batch_size),batch_size,-1,1))
-    test_sequences = test_sequences.reshape((int((len(shuffled_data) - int(test_ratio*len(shuffled_data)))/batch_size),batch_size,-1,1))
+    elif encoding == "STFT":
+        if encoding_options is None:
+            encoding_options = {}
+        window_filter = encoding_options.get("Window Filter", "hann")
+        length = encoding_options.get("Length", 256)
+        hop = encoding_options.get("Hop", length // 2)
 
-    train_labels = train_labels.reshape((int(test_ratio*len(shuffled_data)/batch_size),batch_size,-1))
-    test_labels = test_labels.reshape((int((len(shuffled_data) - int(test_ratio*len(shuffled_data)))/batch_size),batch_size,-1))
+        train_sequences = jax.vmap(lambda input: jnp.abs(jnp.transpose(jax.scipy.signal.stft(input, fs=2000, window=window_filter, nperseg=length, noverlap = hop, return_onesided=True)[2])))(train_sequences)
+        test_sequences = jax.vmap(lambda input: jnp.abs(jnp.transpose(jax.scipy.signal.stft(input, fs=2000, window=window_filter, nperseg=length, noverlap = hop, return_onesided=True)[2])))(test_sequences)
+        # Resulting shapes are:
+        #  train_sequences : [N_train, roundup(N_samples / Hop) + 1, Hop + 1]
+        #  test_sequences  : [N_test, roundup(N_samples / Hop) + 1, Hop + 1]
 
-    return train_sequences, train_labels, test_sequences, test_labels
+    else:
+        raise ValueError(f"Unknown encoding type: {encoding}")
 
-def load_data_stft(data_file_path, batch_size, targets, test_ratio = 0.8, window_filter = 'hann', length = 256, hop = 256//2):
-    with open(data_file_path, "rb") as f:
-        data=pkl.load(f)
+    # === BATCHING STEP (unified) ===
+    train_sequences = train_sequences.reshape((N_train // batch_size, batch_size, *train_sequences.shape[1:]))
+    test_sequences  = test_sequences.reshape((N_test  // batch_size, batch_size, *test_sequences.shape[1:]))
 
-    # Permutate the order of the data
-    perm = np.random.permutation(len(data))
-
-    shuffled_data = [data[i] for i in perm]
-
-    # make the data split
-    train_sequences = jnp.array([x[0] for x in shuffled_data[:int(test_ratio*len(shuffled_data))]])
-    test_sequences = jnp.array([x[0] for x in shuffled_data[int(test_ratio*len(shuffled_data)):]])
-
-    train_labels = one_hot(jnp.array([x[1] for x in shuffled_data[:int(test_ratio*len(shuffled_data))]]), targets)
-    test_labels = one_hot(jnp.array([x[1] for x in shuffled_data[int(test_ratio*len(shuffled_data)):]]), targets)
-
-    
-    # Perform the stft of dataset
-    train_sequences = jax.vmap(lambda input: jnp.abs(jnp.transpose(jax.scipy.signal.stft(input, fs=2000, window=window_filter, nperseg=length, noverlap = hop, return_onesided=True)[2])))(train_sequences)
-    test_sequences = jax.vmap(lambda input: jnp.abs(jnp.transpose(jax.scipy.signal.stft(input, fs=2000, window=window_filter, nperseg=length, noverlap = hop, return_onesided=True)[2])))(test_sequences)
-
-
-    # Batch the sequences
-    train_sequences = train_sequences.reshape((int(test_ratio*len(shuffled_data)/batch_size),batch_size,train_sequences.shape[1],train_sequences.shape[2]))
-    test_sequences = test_sequences.reshape((int((len(shuffled_data) - int(test_ratio*len(shuffled_data)))/batch_size),batch_size,test_sequences.shape[1],test_sequences.shape[2]))
-
-    train_labels = train_labels.reshape((int(test_ratio*len(shuffled_data)/batch_size),batch_size,-1))
-    test_labels = test_labels.reshape((int((len(shuffled_data) - int(test_ratio*len(shuffled_data)))/batch_size),batch_size,-1))
+    train_labels = train_labels.reshape((N_train // batch_size, batch_size, -1))
+    test_labels  = test_labels.reshape((N_test  // batch_size, batch_size, -1))
 
     return train_sequences, train_labels, test_sequences, test_labels
-
-    
 
 
 def init_lru_parameters_uneven(N, H_in, H_out, r_min = 0.0, r_max = 1, max_phase = 6.28):
