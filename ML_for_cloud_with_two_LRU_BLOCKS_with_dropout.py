@@ -142,4 +142,4 @@ for mem_size in LRU_memory_list :
                                             } }
 
                 with open(f"{output_folder_path}/results{idx} time {datetime.now():%Y-%m-%d %H-%M-%S.%f}.pkl", "wb") as f:                
-                    pkl.dump({k:v for k,v in train_model(model_and_hyperparameters, dataset_file_path, key).items() if k != "Learning Rate"}, f)
+                    pkl.dump({k:v for k,v in train_model(model_and_hyperparameters, dataset_file_path, key).items() if k != "Learning Rate"}, f) # take all the key-value pairs except the learning rate
