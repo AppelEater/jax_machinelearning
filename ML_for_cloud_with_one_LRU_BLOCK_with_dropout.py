@@ -8,10 +8,10 @@ import optax
 #
 
 # Dataset file path
-dataset_file_path = "./datasets/8mfsk/absolute_doppler_waveforms_CNO_[14.2],[16.67]_and90_samprate_2000_1736935556.6539564.pkl"
-
+# dataset_file_path = "./datasets/8mfsk/absolute_doppler_waveforms_CNO_[14.2],[16.67]_and90_samprate_2000_1736935556.6539564.pkl"
+dataset_file_path = "./datasets/8mfsk/absolute_doppler_waveforms_CNO_[14.2],[16.67]_and0_samprate_2000_1736520994.6523163.pkl"
 # Output folder
-output_folder_path ="./results/grid_search34"
+output_folder_path ="./results/grid_search35"
 
 # Batch size
 batch_sizes = [100]
@@ -111,10 +111,16 @@ key = jax.random.key(135)
 for mem_size in LRU_memory_list :
     for i in range(4):
         # Define the model
-        Encoding_layer = init_mlp_parameters([257,257])
-        LRU_sub = init_lru_parameters(mem_size, 257, r_min =0.9, r_max=0.999)
-        LRU_Mixer = init_mlp_parameters([257,257,257])
-        Decoding_layer = init_mlp_parameters([257,100,9])
+        # Encoding_layer = init_mlp_parameters([257,257])
+        # LRU_sub = init_lru_parameters(mem_size, 257, r_min =0.9, r_max=0.999)
+        # LRU_Mixer = init_mlp_parameters([257,257,257])
+        # Decoding_layer = init_mlp_parameters([257,100,9])
+        
+        # TODO: spostare i parametri "sopra"
+        Encoding_layer = init_mlp_parameters([129,129])
+        LRU_sub = init_lru_parameters(mem_size, 129, r_min =0.9, r_max=0.999)
+        LRU_Mixer = init_mlp_parameters([129,129,129])
+        Decoding_layer = init_mlp_parameters([129,50,9])
 
         for idx, learning_rate in enumerate(learning_rates):
             for drop_out in dropout_list:
@@ -126,8 +132,8 @@ for mem_size in LRU_memory_list :
                                             "Encoding" : "STFT",
                                             "Encoding Options" : {
                                                                     "Window Filter" : 'hann',
-                                                                    "Length" : 512,
-                                                                    "Hop" : 256
+                                                                    "Length" : 256, #512
+                                                                    "Hop" : 128 #256
                                                                   },
                                             "Dropout" : drop_out,
                                             "loss_function" : "CrossEntropy",
@@ -141,3 +147,6 @@ for mem_size in LRU_memory_list :
 
                 with open(f"{output_folder_path}/results{idx} time {datetime.now():%Y-%m-%d %H-%M-%S.%f}.pkl", "wb") as f:                
                     pkl.dump({k:v for k,v in train_model(model_and_hyperparameters, dataset_file_path, key).items() if k != "Learning Rate"}, f)
+
+
+                print(f"Finished training with mem size {mem_size}, learning rate {learning_rate}, dropout {drop_out}")
