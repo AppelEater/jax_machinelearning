@@ -261,6 +261,18 @@ def load_data(data_file_path, batch_size, targets, test_ratio=0.8, encoding="raw
     # Read data
     with open(data_file_path, "rb") as f:
         data = pkl.load(f)
+
+    # Manage different formats of input file
+    if isinstance(data, list):  # Old format: list of (wave, label)
+        metadata = None
+        version = 1
+    elif isinstance(data, dict):  # New format: dict
+        metadata = data.get("metadata", None)
+        version = data.get("version", None)
+        data = data["waveforms"]
+    else:  # Unknown format
+        raise ValueError("Unknown dataset format")
+
     N_total = len(data)
     N_train = int(test_ratio * N_total)
     N_test = N_total - N_train
