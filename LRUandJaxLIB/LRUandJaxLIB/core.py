@@ -6,21 +6,8 @@ from jax import jit, grad, vmap
 import optax
 
 
-import pickle as pkl
-
-import itertools
-import more_itertools as mit
-
-import os
-
-import gc
-
-import re
-import ast
-from pathlib import Path
-
-
 parallel_scan = jax.lax.associative_scan
+
 
 def binary_operator_diag(element_i, element_j):
     a_i, bu_i = element_i
@@ -66,8 +53,6 @@ def init_lru_parameters(N, H, r_min = 0.0, r_max = 1, max_phase = 6.28):
     return nu_log, theta_log, B_re, B_im, C_re, C_im, D, gamma_log
 
 
-
-
 def forward_LRU(lru_parameters, input_sequence):
     # Unpack the LRU parameters
     nu_log, theta_log, B_re, B_im, C_re, C_im, D, gamma_log = lru_parameters
@@ -85,8 +70,8 @@ def forward_LRU(lru_parameters, input_sequence):
     _, inner_states = parallel_scan(binary_operator_diag, elements) # all x_k
     y = jax.vmap(lambda x, u: (C @ x).real + D * u)(inner_states, input_sequence)
 
-
     return y
+
 
 def init_mlp_parameters(layers):
     """
@@ -105,6 +90,7 @@ def init_mlp_parameters(layers):
 
     return parameters
 
+
 @jit
 def forward_mlp(mlp_parameters, input, activation_function = jnp.tanh):
     # Forward pass of the MLP
@@ -117,6 +103,7 @@ def forward_mlp(mlp_parameters, input, activation_function = jnp.tanh):
 
     return x
 
+
 @jit
 def dropout(input, prob, random_key):
     """
@@ -128,21 +115,23 @@ def dropout(input, prob, random_key):
 
     return jnp.where(mask, input, 0)
 
+
 @jit
-def forward_mlp_with_dropout(mlp_parameters, input, random_key, prob, Training = True, activation_function = jnp.tanh):
+def forward_mlp_with_dropout(mlp_parameters, input, prob, random_key, activation_function = jnp.tanh):
     # Forward pass of the MLP with dropout
     
     x = input
-
 
     for W, b in mlp_parameters:
         x = dropout(x, prob, random_key)
         x = x @ W + b
         x = activation_function(x)
         random_key, _ = jax.random.split(random_key)
+
     return x
 
 
+@jit
 def forward_mlp_linear_with_classification(mlp_parameters, input, activation_function = jnp.tanh):
     
     x = input
@@ -159,9 +148,7 @@ def forward_mlp_linear_with_classification(mlp_parameters, input, activation_fun
     # Use the softmax function on the last layer
     x = jax.nn.softmax(x)
 
-
     return x
-
 
 
 def layer_normalization(activations):
@@ -171,55 +158,51 @@ def layer_normalization(activations):
 
 layer_normalization_sequence = vmap(layer_normalization)
 
+
 def max_pooling(sequence_to_pool):
     return jnp.max(sequence_to_pool, axis=0)
+
 
 def mean_pooling(sequence_to_pool):
     return jnp.mean(sequence_to_pool, axis=0)
 
+
 def sum_pooling(sequence_to_pool):
     return jnp.sum(sequence_to_pool, axis=0)
 
-def model_forward(input_sequence, parameters, training = True):
+
+def model_forward(input_sequence, parameters, prob, key):
     """
     The model forward function, which takes in the input sequence and the parameters and returns the output of the model.
 
-    Parameters = Linear_encoder_parameter,  LRU, seconday_parameters, Linear_decoder_parameter 
+    Parameters = Linear_encoder_parameter,  LRU, Mixer, Linear_decoder_parameter 
     """
-    Linear_encoder_parameter,  LRU, seconday_parameters, Linear_decoder_parameter = parameters
+
+    Linear_encoder_parameter,  LRU_list, Mixer_list, Linear_decoder_parameter = parameters
 
     x = forward_mlp(Linear_encoder_parameter, input_sequence)
-    skip = x
-    x = layer_normalization_sequence(x)
-    x = forward_LRU(LRU, x)
-    x = forward_mlp(seconday_parameters, x) + skip
+    for LRU, Mixer in zip(LRU_list, Mixer_list):
+        skip = x
+        x = layer_normalization_sequence(x)
+        x = forward_LRU(LRU, x)
+        x = forward_mlp_with_dropout(Mixer, x, prob, key) + skip
     x = max_pooling(x)
     x = forward_mlp_linear_with_classification(Linear_decoder_parameter, x)
 
     return x
 
-
 # Batch model forward
-batch_model_forward = vmap(model_forward, in_axes=(0, None))
-
-def one_hot(x, k, dtype=jnp.float32):
-  """Create a one-hot encoding of x of size k."""
-  return jnp.array(x[:, None] == jnp.arange(k), dtype)
+batch_model_forward = vmap(model_forward, in_axes=(0, None, None, None))
 
 @jit
-def loss_fn(input_sequences, target_sequences, parameters):
-    y = batch_model_forward(input_sequences, parameters)
+def loss_fn(input_sequences, target_sequences, parameters, prob, key):
+    y = batch_model_forward(input_sequences, parameters, prob, key)
 
     # Binary cross entropy loss
     return -jnp.mean(jnp.sum(target_sequences * jnp.log(y), axis=1))
 
 @jit
-def model_grad(input_sequence, target_sequence, parameters):
-    return grad(loss_fn, argnums=2)(input_sequence, target_sequence, parameters)
-
-
-@jit
-def accuracy(input_sequences, target_sequences, parameters):
+def accuracy(input_sequences, target_sequences, parameters, prob, key):
     """
     Perfrom a batch accuracy measuremet
 
@@ -227,162 +210,17 @@ def accuracy(input_sequences, target_sequences, parameters):
     target_sequences = [one_hot(int), one_hot(int), one_hot(int)]
     parameters = model parameters
     """
-    y = batch_model_forward(input_sequences, parameters)
+    y = batch_model_forward(input_sequences, parameters, 0.0, key)
     return jnp.mean(jnp.argmax(y, axis=1) == jnp.argmax(target_sequences, axis=1))
 
-batch_model_grad = vmap(model_grad, in_axes=(0, 0, None))
+@jit
+def model_grad(input_sequence, target_sequence, parameters, prob, key):
+    return grad(loss_fn, argnums=2)(input_sequence, target_sequence, parameters, prob, key)
 
+batch_model_grad = vmap(model_grad, in_axes=(0, 0, None, None, None))
 
-def parse_value(val):
-    """
-    Always return a list:
-    - '[0.05]'  → [0.05]
-    - '90'      → [90.0]
-    """
-    parsed = ast.literal_eval(val)
-    if isinstance(parsed, (list, tuple)):
-        return list(parsed)
-    return [float(parsed)]
-
-def parse_filename(filename):
-    name = Path(filename).stem  # remove .pkl
-
-    pattern = (
-        r"absolute_doppler_waveforms_CNO_(.+?),"
-        r"(.+?)_and"
-        r"(.+?)_samprate_"
-        r"(.+?)_"
-        r"(\d+(\.\d+)?)$"
-    )
-
-    match = re.match(pattern, name)
-    if not match:
-        raise ValueError("Filename does not match expected format")
-
-    CNO_list = ast.literal_eval(match.group(1))
-    doppler_rate_uncertainty = parse_value(match.group(2))
-    doppler_uncertainty = parse_value(match.group(3))
-    sampling_rate = float(match.group(4))
-
-    return {
-        "sampling_rate": sampling_rate,
-        "CNO_list": CNO_list,
-        "doppler_uncertainty_list": doppler_uncertainty,
-        "doppler_rate_uncertainty": doppler_rate_uncertainty,
-    }
-
-
-def load_data(file_name, batch_size, test_ratio=0.8, encoding="raw", encoding_options=None):
-    """
-    Load the data from the data file path
-
-    data structure = [(Wave_sequence, target), ... ]
-
-    Parameters
-    ----------
-    file_name : str
-        File name of pickled dataset including full path.
-    batch_size : int
-        Batch size for returned data.
-    test_ratio : float
-        Proportion of the dataset to use for training. (0,1]
-    encoding : str
-        "raw" → return sequences
-        "STFT" → apply STFT transform.
-    encoding_options : dict
-        Only used when encoding="STFT". Expected keys:
-            - "window_filter" (str, default "hann")
-            - "length" (int, default 256)
-            - "hop" (int, default length//2)
-
-    Returns
-    -------
-    train_sequences, train_labels, test_sequences, test_labels
-    """
-
-    # Read data
-    with open(file_name, "rb") as f:
-        data = pkl.load(f)
-
-    # Manage different formats of input file
-    if isinstance(data, list):  # Old format: list of (wave, label)
-        # No metadata available, guess from file name and use some defaults
-        metadata_from_file = parse_filename(file_name)
-        metadata = {
-            "sampling_rate": metadata_from_file["sampling_rate"],
-            "tone_duration": 3.0,
-
-            "tones": [150, 250, 350, 450, 550, 650, 750, 850],
-            "noise": True,
-            "num_waveforms_per_class": 6000,
-
-            "CNO_list": metadata_from_file["CNO_list"],
-            "doppler_uncertainty_list": metadata_from_file["doppler_uncertainty_list"],
-            "doppler_rate_uncertainty": metadata_from_file["doppler_rate_uncertainty"],
-        }
-        version = 1
-        targets = len(data)//1000    # assumes 1000 waveforms per target class (normally used before migration)
-    elif isinstance(data, dict):  # New format: dict
-        metadata = data.get("metadata", None)
-        version = data.get("version", None)
-        data = data["waveforms"]
-        targets = len(metadata["tones"]) + metadata["noise"]
-    else:  # Unknown format
-        raise ValueError("Unknown dataset format")
-
-    N_total = len(data)
-    N_train = int(test_ratio * N_total)
-    N_test = N_total - N_train
-    # Resulting shape is [N_total of ( N_samples, 1 )]
-
-    # Shuffle
-    perm = np.random.permutation(len(data))
-    shuffled_data = [data[i] for i in perm]
-
-    # Split train and test, sequences and labels
-    train_sequences = jnp.array([x[0] for x in shuffled_data[:N_train]])
-    test_sequences  = jnp.array([x[0] for x in shuffled_data[N_train:]])
-    train_labels = one_hot(jnp.array([x[1] for x in shuffled_data[:N_train]]), targets)
-    test_labels  = one_hot(jnp.array([x[1] for x in shuffled_data[N_train:]]), targets)
-    # Resulting shapes are:
-    #  train_sequences : [N_train, N_samples]
-    #  test_sequences  : [N_test, N_samples]
-    #  train_labels    : [N_train, targets]
-    #  test_labels     : [N_test, targets]
-
-    # === ENCODING STEP ===
-    if encoding == "Raw":
-        train_sequences = train_sequences.reshape((N_train, train_sequences.shape[1], 1))
-        test_sequences  = test_sequences.reshape((N_test, test_sequences.shape[1], 1))
-        # Resulting shapes are:
-        #  train_sequences : [N_train, N_samples, 1]
-        #  test_sequences  : [N_test, N_samples, 1]
-
-    elif encoding == "STFT":
-        if encoding_options is None:
-            encoding_options = {}
-        window_filter = encoding_options.get("Window Filter", "hann")
-        length = encoding_options.get("Length", 256)
-        hop = encoding_options.get("Hop", length // 2)
-
-        train_sequences = jax.vmap(lambda input: jnp.abs(jnp.transpose(jax.scipy.signal.stft(input, fs=2000, window=window_filter, nperseg=length, noverlap = hop, return_onesided=True)[2])))(train_sequences)
-        test_sequences = jax.vmap(lambda input: jnp.abs(jnp.transpose(jax.scipy.signal.stft(input, fs=2000, window=window_filter, nperseg=length, noverlap = hop, return_onesided=True)[2])))(test_sequences)
-        # Resulting shapes are:
-        #  train_sequences : [N_train, roundup(N_samples / Hop) + 1, Hop + 1]
-        #  test_sequences  : [N_test, roundup(N_samples / Hop) + 1, Hop + 1]
-
-    else:
-        raise ValueError(f"Unknown encoding type: {encoding}")
-
-    # === BATCHING STEP (unified) ===
-    train_sequences = train_sequences.reshape((N_train // batch_size, batch_size, *train_sequences.shape[1:]))
-    test_sequences  = test_sequences.reshape((N_test  // batch_size, batch_size, *test_sequences.shape[1:]))
-
-    train_labels = train_labels.reshape((N_train // batch_size, batch_size, -1))
-    test_labels  = test_labels.reshape((N_test  // batch_size, batch_size, -1))
-
-    return [train_sequences, train_labels, test_sequences, test_labels], metadata
-
+# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 def init_lru_parameters_uneven(N, H_in, H_out, r_min = 0.0, r_max = 1, max_phase = 6.28):
     """
@@ -420,6 +258,7 @@ def init_lru_parameters_uneven(N, H_in, H_out, r_min = 0.0, r_max = 1, max_phase
     gamma_log = np.log(np.sqrt(1-np.abs(diag_lambda)**2))
 
     return nu_log, theta_log, B_re, B_im, C_re, C_im, D, gamma_log
+
 
 def forward_LRU_uneven(lru_parameters, input_sequence):
     # Unpack the LRU parameters
