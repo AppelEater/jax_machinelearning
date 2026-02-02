@@ -1,27 +1,24 @@
+from LRUandJaxLIB import *
+import argparse
 import pickle as pkl
 import jax
 import jax.numpy as jnp
 import numpy as np
 
+# -------------------------------------------------------------
 
-def load_trained_model(model_pkl_path, epoch=-1):
-    """
-    Load trained model parameters from pickle file.
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Run inference on an input dataset or signal using given trained model"
+    )
 
-    epoch = -1 -> last epoch
-    """
-    with open(model_pkl_path, "rb") as f:
-        data = pkl.load(f)
+    # Input file names
+    parser.add_argument("data_file")
+    parser.add_argument("model_file")
 
-    # Model parameters are stored as a list over epochs
-    model_parameters = data["Model Parameters"][epoch]
+    return parser.parse_args()
 
-    # Other useful metadata
-    encoding = data["Encoding"]
-    encoding_options = data.get("Encoding Options", None)
-
-    return model_parameters, encoding, encoding_options
-
+# -------------------------------------------------------------
 
 def encode_single_sequence(raw_sequence, encoding, encoding_options):
     """
@@ -57,6 +54,7 @@ def encode_single_sequence(raw_sequence, encoding, encoding_options):
     else:
         raise ValueError(f"Unknown encoding type: {encoding}")
 
+# -------------------------------------------------------------
 
 def run_sliding_inference(
     stream,
@@ -64,14 +62,12 @@ def run_sliding_inference(
     encoding,
     encoding_options,
     window_length,
-    key
 ):
     """
     Apply the model to every maximally-overlapping slice of the stream.
     """
 
     predictions = []
-    dropout = 0.0
     training = False
 
     for i in range(len(stream) - window_length + 1):
@@ -82,12 +78,12 @@ def run_sliding_inference(
             encoding_options
         )
 
-        logits = model_forward3(
+        logits = model_forward(
             encoded,
             model_parameters,
-            dropout,
-            key,
-            training
+            prob=0.0,
+            key=None,
+            training=training
         )
 
         probs = jax.nn.softmax(logits)
@@ -98,25 +94,54 @@ def run_sliding_inference(
 
     return np.squeeze(np.array(predictions), axis=1)
 
+# -------------------------------------------------------------
 
-key = jax.random.key(0)
+def main():
 
-# Load trained model
-model_parameters, encoding, encoding_options = load_trained_model(
-    "./results/grid_search34/results0.pkl"
-)
+    args = parse_args()
 
-# Load streaming data
-with open("./data/stream.pkl", "rb") as f:
-    stream = pkl.load(f)
+    # Load trained model
+    with open(args.model_file, "rb") as f:
+        data = pkl.load(f)
+    model_parameters = data["parameters"][-1]
+    config = data["config"]
 
-predictions = run_sliding_inference(
-    stream = jnp.asarray(stream),
-    model_parameters=model_parameters,
-    encoding=encoding,
-    encoding_options=encoding_options,
-    window_length=stream_window_length,  # MUST match training waveform length
-    key=key
-)
+    # Load input data
+    with open(args.data_file, "rb") as f:
+        data = pkl.load(f)
 
-predicted_classes = np.argmax(predictions, axis=-1)
+    metadata = data["metadata"]
+    stream = data["stream"]
+    expected_classes = data["tone_labels"]
+
+    # ---------------------------------------------------------
+
+    hard_keys = ("sampling_rate", "tone_duration", "tones")
+    soft_keys = ("CNO_list", "doppler_uncertainty_list", "doppler_rate_uncertainty")    # Lists of values
+
+    for item in hard_keys:
+        if metadata[item] != config["dataset"][item]:
+            raise ValueError("Input data not compatible with trained model")
+
+    for item in soft_keys:
+        if metadata[item] not in config["dataset"][item]:
+            print(f"Different values in {item} among input data and trained model")
+
+    stream_window_length = round(metadata["sampling_rate"] * metadata["tone_duration"])
+
+    # ---------------------------------------------------------
+
+    predictions = run_sliding_inference(
+        stream = jnp.asarray(stream),
+        model_parameters=model_parameters,
+        encoding=config["encoding"],
+        encoding_options=config["encoding_options"],
+        window_length=stream_window_length,
+    )
+
+    predicted_classes = np.argmax(predictions, axis=-1)
+
+# -------------------------------------------------------------
+
+if __name__ == "__main__":
+    main()
