@@ -4,4 +4,5 @@ __pycache__
 *.pyc
 datasets/**/*
 results/**/*
+results_new/**/*
 old_stuff/**/*

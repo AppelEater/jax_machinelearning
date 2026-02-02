@@ -15,6 +15,11 @@ import os
 
 import gc
 
+import re
+import ast
+from pathlib import Path
+
+
 parallel_scan = jax.lax.associative_scan
 
 def binary_operator_diag(element_i, element_j):
@@ -228,7 +233,46 @@ def accuracy(input_sequences, target_sequences, parameters):
 batch_model_grad = vmap(model_grad, in_axes=(0, 0, None))
 
 
-def load_data(data_file_path, batch_size, targets, test_ratio=0.8, encoding="raw", encoding_options=None):
+def parse_value(val):
+    """
+    Always return a list:
+    - '[0.05]'  → [0.05]
+    - '90'      → [90.0]
+    """
+    parsed = ast.literal_eval(val)
+    if isinstance(parsed, (list, tuple)):
+        return list(parsed)
+    return [float(parsed)]
+
+def parse_filename(filename):
+    name = Path(filename).stem  # remove .pkl
+
+    pattern = (
+        r"absolute_doppler_waveforms_CNO_(.+?),"
+        r"(.+?)_and"
+        r"(.+?)_samprate_"
+        r"(.+?)_"
+        r"(\d+(\.\d+)?)$"
+    )
+
+    match = re.match(pattern, name)
+    if not match:
+        raise ValueError("Filename does not match expected format")
+
+    CNO_list = ast.literal_eval(match.group(1))
+    doppler_rate_uncertainty = parse_value(match.group(2))
+    doppler_uncertainty = parse_value(match.group(3))
+    sampling_rate = float(match.group(4))
+
+    return {
+        "sampling_rate": sampling_rate,
+        "CNO_list": CNO_list,
+        "doppler_uncertainty_list": doppler_uncertainty,
+        "doppler_rate_uncertainty": doppler_rate_uncertainty,
+    }
+
+
+def load_data(file_name, batch_size, test_ratio=0.8, encoding="raw", encoding_options=None):
     """
     Load the data from the data file path
 
@@ -236,12 +280,10 @@ def load_data(data_file_path, batch_size, targets, test_ratio=0.8, encoding="raw
 
     Parameters
     ----------
-    data_file_path : str
-        Path to the pickled dataset.
+    file_name : str
+        File name of pickled dataset including full path.
     batch_size : int
         Batch size for returned data.
-    targets : int
-        Number of target classes.
     test_ratio : float
         Proportion of the dataset to use for training. (0,1]
     encoding : str
@@ -259,17 +301,32 @@ def load_data(data_file_path, batch_size, targets, test_ratio=0.8, encoding="raw
     """
 
     # Read data
-    with open(data_file_path, "rb") as f:
+    with open(file_name, "rb") as f:
         data = pkl.load(f)
 
     # Manage different formats of input file
     if isinstance(data, list):  # Old format: list of (wave, label)
-        metadata = None
+        # No metadata available, guess from file name and use some defaults
+        metadata_from_file = parse_filename(file_name)
+        metadata = {
+            "sampling_rate": metadata_from_file["sampling_rate"],
+            "tone_duration": 3.0,
+
+            "tones": [150, 250, 350, 450, 550, 650, 750, 850],
+            "noise": True,
+            "num_waveforms_per_class": 6000,
+
+            "CNO_list": metadata_from_file["CNO_list"],
+            "doppler_uncertainty_list": metadata_from_file["doppler_uncertainty_list"],
+            "doppler_rate_uncertainty": metadata_from_file["doppler_rate_uncertainty"],
+        }
         version = 1
+        targets = len(data)//1000    # assumes 1000 waveforms per target class (normally used before migration)
     elif isinstance(data, dict):  # New format: dict
         metadata = data.get("metadata", None)
         version = data.get("version", None)
         data = data["waveforms"]
+        targets = len(metadata["tones"]) + metadata["noise"]
     else:  # Unknown format
         raise ValueError("Unknown dataset format")
 
@@ -324,7 +381,7 @@ def load_data(data_file_path, batch_size, targets, test_ratio=0.8, encoding="raw
     train_labels = train_labels.reshape((N_train // batch_size, batch_size, -1))
     test_labels  = test_labels.reshape((N_test  // batch_size, batch_size, -1))
 
-    return train_sequences, train_labels, test_sequences, test_labels
+    return [train_sequences, train_labels, test_sequences, test_labels], metadata
 
 
 def init_lru_parameters_uneven(N, H_in, H_out, r_min = 0.0, r_max = 1, max_phase = 6.28):
@@ -380,6 +437,5 @@ def forward_LRU_uneven(lru_parameters, input_sequence):
     elements = (Lambda_elements, Bu_elements)
     _, inner_states = parallel_scan(binary_operator_diag, elements) # all x_k
     y = jax.vmap(lambda x, u: (C @ x).real + D @ u )(inner_states, input_sequence)
-
 
     return y
