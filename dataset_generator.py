@@ -30,6 +30,8 @@ def parse_args():
                         help="Frequency of the lowest tome")
     parser.add_argument("--freq-spacing", type=int, default=100,
                         help="Tones frequency spacing")
+    parser.add_argument("--no-noise", action="store_true",
+                        help="Do not include noise class")
 
     # Modulation / channel parameters
     parser.add_argument("--cno", nargs='*', type=float, default=[14.2],
@@ -58,7 +60,8 @@ def main():
     sampling_rate = args.sampling_rate
     duration = args.duration
     num_waveforms = args.num_waveforms
-    frequencies = jnp.arange(args.order) * args.freq_spacing + args.fist_freq 
+    frequencies = [args.fist_freq + i * args.freq_spacing for i in range(args.order)]
+    noise =  not(args.no_noise)
     CNO_list = args.cno
     doppler_uncertainty_list = args.doppler_uncertainty
     doppler_rate_uncertainty = args.doppler_rate_uncertainty
@@ -96,10 +99,11 @@ def main():
                     waveforms.append((wave, idx))  # Save wavefore incl. normalisation
 
             # Generate noise only class
-            for i in range(num_waveforms):
-                key, subkey = jax.random.split(key)
-                wave = jax.random.normal(key, (samples))
-                waveforms.append((wave/jnp.sqrt(jnp.mean(wave**2)), 8))
+            if noise:
+                for i in range(num_waveforms):
+                    key, subkey = jax.random.split(key)
+                    wave = jax.random.normal(key, (samples))
+                    waveforms.append((wave/jnp.sqrt(jnp.mean(wave**2)), 8))
 
     # -------------------------------------------------------------
 
@@ -110,8 +114,8 @@ def main():
         "sampling_rate": sampling_rate,
         "tone_duration": duration,
 
-        "tones": np.array(frequencies),
-        "noise": True,
+        "tones": frequencies,
+        "noise": noise,
         "num_waveforms_per_class": num_waveforms,
 
         "CNO_list": CNO_list,
