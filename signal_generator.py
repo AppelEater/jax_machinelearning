@@ -1,11 +1,9 @@
 import os
 import argparse
 
-import jax
-import jax.numpy as jnp
 import numpy as np
 import time
-import pickle
+import pickle as pkl
 
 version = "1.0"
 
@@ -17,6 +15,14 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Generate a tone sequence for inference testing"
     )
+
+    # Output
+    parser.add_argument("output_file", type=str,
+                        help="Output pickle file")
+
+    # Reference trained model
+    parser.add_argument("--ref-model", type=str, default=None,
+                        help="Sampling rate [Hz]")
 
     # Signal parameters
     parser.add_argument("--sampling-rate", type=float, default=2000,
@@ -44,10 +50,6 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=None,
                         help="Random seed")
 
-    # Output
-    parser.add_argument("--output", type=str, default=None,
-                        help="Output pickle file")
-
     return parser.parse_args()
 
 # -------------------------------------------------------------
@@ -56,62 +58,74 @@ def main():
 
     args = parse_args()
 
-    sampling_rate = args.sampling_rate
-    duration = args.duration
+    if args.ref_model is None:
+        # If no reference model provided, uses default or provided parameters
+        sampling_rate = args.sampling_rate
+        duration = args.duration
+        frequencies = [args.fist_freq + i * args.freq_spacing for i in range(args.order)]
+        cno = args.cno
+        doppler_uncertainty = args.doppler_uncertainty
+        doppler_rate_uncertainty = args.doppler_rate_uncertainty
+    else:
+        # Otherwise, load the model and retrieve parameters from it
+        with open(args.ref_model, "rb") as f:
+            data = pkl.load(f)
+            config = data["config"]
+            sampling_rate = config["dataset"]["sampling_rate"]
+            duration = config["dataset"]["tone_duration"]
+            frequencies = config["dataset"]["tones"]
+            cno = min(config["dataset"]["CNO_list"])
+            doppler_uncertainty = max(config["dataset"]["doppler_uncertainty_list"])
+            doppler_rate_uncertainty = max(config["dataset"]["doppler_rate_uncertainty"])
+
     num_tones = args.num_tones
-    frequencies = jnp.arange(args.order) * args.freq_spacing + args.fist_freq 
-    CNO = args.cno
-    doppler_uncertainty = args.doppler_uncertainty
-    doppler_rate_uncertainty = args.doppler_rate_uncertainty
 
     # -------------------------------------------------------------
 
     if args.seed is None:
-        key = jax.random.PRNGKey(time.time_ns())
+        rng = np.random.default_rng()
     else:
-        key = jax.random.PRNGKey(args.seed)
-    key, key_dopp = jax.random.split(key)
+        rng = np.random.default_rng(args.seed)
 
     samples_per_tone = int(sampling_rate * duration)
 
-    t = jnp.linspace(0, duration, samples_per_tone, endpoint=False)
+    t = np.linspace(0, duration, samples_per_tone, endpoint=False)
 
-    fixed_doppler = jax.random.uniform(key_dopp, shape=(), minval=-doppler_uncertainty / 2, maxval= doppler_uncertainty / 2)
+    fixed_doppler = rng.uniform(-doppler_uncertainty / 2, doppler_uncertainty / 2)
 
-    noise_std = jnp.sqrt(sampling_rate / 2 / 10**(CNO / 10))
+    noise_std = np.sqrt(sampling_rate / 2 / 10**(cno / 10))
 
     stream = []
     tone_labels = []   # optional, for debugging / evaluation
 
     for i in range(num_tones):
-        key, k_freq, k_phase, k_dru, k_noise = jax.random.split(key, 5)
-
+        
         # Pick random MFSK symbol
-        symbol_idx = jax.random.randint(k_freq, shape=(), minval=0, maxval=8)
+        symbol_idx = rng.integers(0, args.order)
         freq = frequencies[symbol_idx]
 
         # Doppler rate for this tone (varies per tone)
-        dru = jax.random.uniform(k_dru, shape=(), minval=-doppler_rate_uncertainty, maxval= doppler_rate_uncertainty)
+        dru = rng.uniform(-doppler_rate_uncertainty, doppler_rate_uncertainty)
 
         # Instantaneous frequency
         freq_t = freq + fixed_doppler + dru * t
 
         # Random phase
-        phase = jax.random.uniform(k_phase, shape=(), minval=0, maxval=2*jnp.pi)
+        phase = rng.uniform(0, 2*np.pi)
 
         # Unit-power sinusoid
-        wave = jnp.sqrt(2) * jnp.sin(2*jnp.pi*freq_t * t + phase)
+        wave = np.sqrt(2) * np.sin(2*np.pi*freq_t * t + phase)
 
         # Add noise
-        wave += jax.random.normal(k_noise, shape=(samples_per_tone,)) * noise_std
+        wave += rng.normal(0.0, noise_std, size=samples_per_tone)
 
         # Final normalization (same as training)
-        wave /= jnp.sqrt(jnp.mean(wave**2))
+        wave /= np.sqrt(np.mean(wave**2))
 
         stream.append(wave)
         tone_labels.append(int(symbol_idx))
 
-    stream = np.asarray(jnp.concatenate(stream))
+    stream = np.concatenate(stream)
     tone_labels = np.array(tone_labels)
 
     metadata = {
@@ -121,11 +135,11 @@ def main():
         "sampling_rate": sampling_rate,
         "tone_duration": duration,
 
-        "tones": np.array(frequencies),
+        "tones": frequencies,
         "noise": False,
         "num_tones": num_tones,
 
-        "CNO_list": CNO,
+        "CNO_list": cno,
         "doppler_uncertainty_list": doppler_uncertainty,
         "doppler_rate_uncertainty": doppler_rate_uncertainty,
     }
@@ -137,12 +151,12 @@ def main():
         "tone_labels": tone_labels
     }
 
-    if args.output is None:
+    if args.output_file is None:
         timestamp = time.strftime("%Y%m%d_%H%M%S")
-        args.output = f"inference_tones_stream_{timestamp}.pkl"
+        args.output_file = f"inference_tones_stream_{timestamp}.pkl"
 
-    with open(f"datasets/{args.output}", "wb") as f:
-        pickle.dump(output, f)
+    with open(f"{args.output_file}", "wb") as f:
+        pkl.dump(output, f)
 
 
 if __name__ == "__main__":
