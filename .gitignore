@@ -1,7 +1,10 @@
+.*
+!.gitignore
 __pycache__
 *__pycache__*
 *.egg-info
 *.pyc
+*.pkl
 datasets/**/*
 results/**/*
 results_new/**/*

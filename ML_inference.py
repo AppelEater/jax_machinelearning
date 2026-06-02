@@ -1,6 +1,10 @@
 from LRUandJaxLIB import *
+
 import argparse
 import pickle as pkl
+from pathlib import Path
+from tqdm import tqdm
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -48,13 +52,24 @@ def encode_single_sequence(raw_sequence, encoding, encoding_options):
 
         stft_mag = jnp.abs(jnp.transpose(Zxx))
 
-        # [1, T, F]
-        return stft_mag[jnp.newaxis, ...]
+        return stft_mag
 
     else:
         raise ValueError(f"Unknown encoding type: {encoding}")
 
 # -------------------------------------------------------------
+
+def make_encode_and_forward(encoding, encoding_options, model_parameters):
+    key = jax.random.PRNGKey(0)
+
+    @jax.jit
+    def _encode_and_forward(raw_window):
+        encoded = encode_single_sequence(raw_window, encoding, encoding_options)
+        logits = model_forward(encoded, model_parameters, prob=0.0, key=key)
+        return jax.nn.softmax(logits)
+
+    return _encode_and_forward
+
 
 def run_sliding_inference(
     stream,
@@ -68,31 +83,16 @@ def run_sliding_inference(
     """
 
     predictions = []
-    training = False
+    encode_and_forward = make_encode_and_forward(encoding, encoding_options, model_parameters)
 
-    for i in range(len(stream) - window_length + 1):
+    for i in tqdm(range(len(stream) - window_length + 1), desc="Iterations"):
 
-        encoded = encode_single_sequence(
-            stream[i:i + window_length],
-            encoding,
-            encoding_options
-        )
-
-        logits = model_forward(
-            encoded,
-            model_parameters,
-            prob=0.0,
-            key=None,
-            training=training
-        )
-
-        probs = jax.nn.softmax(logits)
+        raw_window = jnp.array(stream[i:i + window_length])
+        probs = encode_and_forward(raw_window)
 
         predictions.append(np.array(probs))
 
-        key, _ = jax.random.split(key)
-
-    return np.squeeze(np.array(predictions), axis=1)
+    return np.array(predictions)
 
 # -------------------------------------------------------------
 
@@ -139,7 +139,10 @@ def main():
         window_length=stream_window_length,
     )
 
-    predicted_classes = np.argmax(predictions, axis=-1)
+    out_path = Path(args.data_file).stem + '_result.pkl'
+    with open(out_path, 'wb') as f:
+        pkl.dump(predictions, f)
+    print(f"Saved predictions to {out_path}")
 
 # -------------------------------------------------------------
 
